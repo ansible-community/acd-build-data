@@ -1,0 +1,49 @@
+---
+- name: Run tests on packaged collections
+  hosts: localhost
+  gather_facts: false
+  vars:
+    galaxy_requirements: "{{ playbook_dir | dirname }}/6/galaxy-requirements.yaml"
+    collections_path: /tmp/ansible_collections
+  tasks:
+    - name: Get list of installed packages to verify if podman is installed
+      package_facts:
+        manager: "auto"
+      # This is noisy (and potentially sensitive) to print on stdout
+      no_log: true
+
+    # This is so we can otherwise run unprivileged if podman is already installed
+    - when: "'podman' not in ansible_facts['packages'].keys()"
+      become: true
+      block:
+        - name: Install podman
+          package:
+            name: podman
+            state: present
+      rescue:
+        - name: Could not install podman
+          fail:
+            msg: |
+              Failed to elevate privileges and install podman.
+              Install podman manually or run ansible-playbook with elevated privileges.
+
+    - name: Install collections from galaxy
+      environment:
+        ANSIBLE_COLLECTIONS_PATH: "{{ collections_path }}"
+      command: ansible-galaxy collection install -r {{ galaxy_requirements }}
+      args:
+        creates: "{{ collections_path }}"
+
+    # ansible.builtin.find doesn't have mindepth
+    # https://github.com/ansible/ansible/issues/36369
+    - name: Find collection directories
+      command: find {{ collections_path }} -mindepth 2 -maxdepth 2 -type d
+      changed_when: false
+      register: _collection_directories
+
+    # Tests are broken up such that there is a task per collection (instead of one very long task)
+    - name: Run sanity tests
+      include_tasks: tasks/sanity-tests.yaml
+      loop: "{{ _collection_directories.stdout_lines }}"
+      loop_control:
+        loop_var: _collection_directory

@@ -1,0 +1,11 @@
+- name: "Run sanity tests for {{ _collection_name }}"
+  vars:
+    _collection_name: >-
+      {%- set _namespace = _collection_directory.split('/')[-2] -%}
+      {%- set _name = _collection_directory.split('/')[-1] -%}
+      {{ _namespace }}.{{ _name }}
+  command: ansible-test sanity --skip-test pylint --docker
+  changed_when: false
+  ignore_errors: true
+  args:
+    chdir: "{{ _collection_directory }}"
