@@ -1,0 +1,48 @@
+name: Sanity tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Run once per week (Monday at 04:00 UTC)
+  schedule:
+    - cron: '0 4 * * 1'
+
+jobs:
+  build:
+    name: '${{ matrix.name }}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: latest Ansible 5 release
+            ansible_major: 5
+            ansible_core: 2.12
+            ansible_core_next: 2.13
+          - name: latest Ansible 6 release
+            ansible_major: 6
+            ansible_core: 2.13
+            ansible_core_next: 2.14
+
+    steps:
+      - name: Check out ansible-build-data
+        uses: actions/checkout@v3
+        with:
+          path: ansible-build-data
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install ansible-core ${{ matrix.ansible_core }}
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install ansible-core>=${{ matrix.ansible_core }},${{ matrix.ansible_core_next }}
+
+      - name: "Run sanity tests for ${{ matrix.name }}"
+        run: |
+          ansible-playbook -vv tests/collection-tests.yaml -e 'galaxy_requirements="{{ playbook_dir | dirname }}/${{ matrix.ansible_major }}/galaxy-requirements.yaml"'
+        working-directory: ansible-build-data
